@@ -7,7 +7,7 @@ namespace PadicExamples
 /-!
 # Examples
 
-A graded collection of statements about `ℚ_[p]` and `ℤ_[p]`, the `p`-adic numbers and
+A collection of statements about `ℚ_[p]` and `ℤ_[p]`, the `p`-adic numbers and
 `p`-adic integers in mathlib.
 
 Try to solve these exercises on paper first, and then write up the proofs here as
