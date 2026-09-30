@@ -1,582 +1,8 @@
+import MscDiss.PadicMachinery
 import Mathlib.Tactic
-import Mathlib.NumberTheory.Padics.PadicNumbers
-import Mathlib
-
-/- # SECTION 1 : THE SQUARE CLASS GROUP -/
-/-
-**(1) What this section does :** For a field `K` we build the square class group
-`SqCl K = Kˣ/(Kˣ)²`, show it has exponent 2 (so it is an 𝔽₂-vector space), and prove the
-descent principle: a function `F : Kˣ → Kˣ → ℤˣ = {±1}` that is multiplicative in each
-variable factors uniquely through a bilinear pairing `SqCl K →* (SqCl K →* ℤˣ)`.
-
-**(2) Why we need it :** Serre states bilinearity of the Hilbert symbol as "`(a,b)` is a
-nondegenerate bilinear form on the 𝔽₂-vector space `kˣ/kˣ²`" (III.1.1, remark after Prop. 2;
-III.1.2, Thm 2). Sections 2–7 show the Hilbert symbol on `ℚ_p` is such a function `F`. This
-section turns any such `F` into the bundled pairing over any field.
-
-**(3) Design choice :** As discussed in prior meetings, we do not take
-`SqCl K →ₗ[ZMod 2] SqCl K →ₗ[ZMod 2] ℤˣ`. Mathlib's linear maps are defined on additive modules
-whereas `SqCl K` and `ℤˣ` are multiplicative groups. To use `Module (ZMod 2)` one would have to
-pass to `Additive (SqCl K)` and `Additive ℤˣ`, and every Hilbert symbol value `(a,b)` would appear
-as `Additive.ofMul (a,b)` with `ofMul`/`toMul` conversions in every statement. This felt messy;
-moreover, on a group of exponent 2 the only scalars are 0 and 1, so 𝔽₂-linearity is additivity,
-i.e. being a group homomorphism.
--/
-
-variable {K : Type*} [Field K]
-
-
-/- # 1.1 THE SUBGROUP OF SQUARES AND THE SQUARE CLASS GROUP -/
-
-
---*Definition 1.1.1 : The subgroup of squares (Kˣ)² ≤ Kˣ*
-abbrev sqSubgroup (K : Type*) [Field K] : Subgroup Kˣ := (powMonoidHom 2 : Kˣ →* Kˣ).range
-
---*Definition 1.1.2 : The square class group SqCl K = Kˣ/(Kˣ)²*
-abbrev SqCl (K : Type*) [Field K] := Kˣ ⧸ sqSubgroup K
-
---*Definition 1.1.3 : The quotient homomorphism Kˣ →* SqCl K*
-def SqCl.mk : Kˣ →* SqCl K := QuotientGroup.mk' (sqSubgroup K)
-
-
-/- # 1.2 THE 𝔽₂ STRUCTURE -/
-
-
---*Lemma 1.2.1 : Every square class squares to 1, i.e. SqCl K has exponent 2*
-lemma SqCl.sq_eq_one (x : SqCl K) : x ^ 2 = 1 := by
-  induction x using QuotientGroup.induction_on with
-  | H a =>
-    rw [← QuotientGroup.mk_pow]
-    refine (QuotientGroup.eq_one_iff (a ^ 2)).mpr ?_
-    simp
-
-
-/- # 1.3 HOMOMORPHISMS KILLING SQUARES FACTOR THROUGH THE SQUARE CLASS GROUP -/
-
-
---*Definition 1.3.1 : Universal property — a homomorphism killing squares descends to SqCl K*
-def SqCl.lift {M : Type*} [CommMonoid M] (f : Kˣ →* M) (hf : ∀ c : Kˣ, f (c ^ 2) = 1) :
-    SqCl K →* M := by
-  have h : ∀ x ∈ sqSubgroup K, f x = 1 := by
-    rintro x ⟨c, rfl⟩
-    exact hf c
-  exact QuotientGroup.lift (sqSubgroup K) f h
-
-
-/- # 1.4 BIMULTIPLICATIVE FUNCTIONS -/
-
-
---*Definition 1.4.1 : F : Kˣ → Kˣ → ℤˣ is bimultiplicative*
-structure IsSqBimult (F : Kˣ → Kˣ → ℤˣ) : Prop where
-  mul_left : ∀ a a' b, F (a * a') b = F a b * F a' b
-  mul_right : ∀ a b b', F a (b * b') = F a b * F a b'
-
-namespace IsSqBimult
-
-variable {F : Kˣ → Kˣ → ℤˣ}
-
---*Lemma 1.4.1 : For a bimultiplicative F, F 1 a = 1*
-lemma one_left (h : IsSqBimult F) (a : Kˣ) : F 1 a = 1 := by
-  have h1 := h.mul_left 1 1 a
-  rw [one_mul] at h1
-  exact left_eq_mul.mp h1
-
---*Lemma 1.4.2 : For a bimultiplicative F, F a 1 = 1*
-lemma one_right (h : IsSqBimult F) (a : Kˣ) : F a 1 = 1 := by
-  have h1 := h.mul_right a 1 1
-  rw [one_mul] at h1
-  exact left_eq_mul.mp h1
-
---*Lemma 1.4.3 : For a bimultiplicative F, F (a²) b = 1*
-lemma sq_left (h : IsSqBimult F) (a b : Kˣ) : F (a ^ 2) b = 1 := by
-  rw [sq, h.mul_left, Int.units_mul_self]
-
---*Lemma 1.4.4 : For a bimultiplicative F, F a (b²) = 1*
-lemma sq_right (h : IsSqBimult F) (a b : Kˣ) : F a (b ^ 2) = 1 := by
-  rw [sq, h.mul_right, Int.units_mul_self]
-
---*Lemma 1.4.5 : Square invariance in the first variable, F (a c²) b = F a b*
-lemma mul_sq_left (h : IsSqBimult F) (a b c : Kˣ) : F (a * c ^ 2) b = F a b := by
-  rw [h.mul_left, h.sq_left, mul_one]
-
---*Lemma 1.4.6 : Square invariance in the second variable, F a (b c²) = F a b*
-lemma mul_sq_right (h : IsSqBimult F) (a b c : Kˣ) : F a (b * c ^ 2) = F a b := by
-  rw [h.mul_right, h.sq_right, mul_one]
-
-
-/- # 1.5 BUNDLING THE PAIRING -/
-
-
---*Definition 1.5.1 : The curried homomorphism Kˣ →* (Kˣ →* ℤˣ) attached to F*
-def hom (h : IsSqBimult F) : Kˣ →* (Kˣ →* ℤˣ) where
-  toFun a :=
-    { toFun := F a
-      map_one' := h.one_right a
-      map_mul' := h.mul_right a }
-  map_one' := by
-    apply MonoidHom.ext
-    intro b
-    exact h.one_left b
-  map_mul' a a' := by
-    apply MonoidHom.ext
-    intro b
-    exact h.mul_left a a' b
-
---*Definition 1.5.2 : The descended pairing SqCl K →* (SqCl K →* ℤˣ)*
-def sqClHom (h : IsSqBimult F) : SqCl K →* (SqCl K →* ℤˣ) := by
-  refine SqCl.lift
-    { toFun := fun a => SqCl.lift (h.hom a) (h.sq_right a)
-      map_one' := ?_
-      map_mul' := ?_ } ?_
-  · apply MonoidHom.ext
-    intro x
-    induction x using QuotientGroup.induction_on with
-    | H b => exact h.one_left b
-  · intro a a'
-    apply MonoidHom.ext
-    intro x
-    induction x using QuotientGroup.induction_on with
-    | H b => exact h.mul_left a a' b
-  · intro c
-    apply MonoidHom.ext
-    intro x
-    induction x using QuotientGroup.induction_on with
-    | H b => exact h.sq_left c b
-
-end IsSqBimult
-
-
-/- # SECTION 2 : THE HILBERT SYMBOL AND SERRE'S PROPOSITION 2 -/
-/-
-**(1) What this section does :** Over an arbitrary field `K` we define the Hilbert symbol
-`(a,b) ∈ {±1}` by solvability of the conic equation `z² = ax² + by²` (Serre III.1.1) and prove
-its elementary properties, listed in Serre as Proposition 2 — specifically those used in later
-sections, namely symmetry, invariance under squares, and the two cancellation rules. Some further
-properties are included; the ones used later are flagged (†).
-
-**(2) Why we need it :** Serre proves the explicit formula for `(a,b)_p` (Thm 1) using these
-properties, and bilinearity (Thm 2) as a corollary of the formula. So this section must be
-proved without bilinearity, and Sections 6–7 follow from what is here.
-
-**(3) Two design decisions :**
-1) Transfer lemmas (2.2) — `hilbertSym` is a classical `if`, so nothing about it computes.
-   Since `ℤˣ = {±1}` the symbol is determined by whether it equals `1`. The lemmas
-   `hilbertSym_eq_one_iff`, `hilbertSym_eq_neg_one_iff`, `hilbertSym_congr` do the `if`
-   elimination, after which every argument is about solutions of `z² = ax² + by²`.
-2) Norm form instead of Serre's Prop. 1 (2.4) — Serre derives (iii) from
-   `(a,b) = 1 ⟺ a ∈ N(K(√b)ˣ)`. We avoid constructing `K(√b)`: a nontrivial solution of
-   `z² = ax² + by²` is the same as an expression `a = z² − b y²` (unless `b` is a square),
-   and closure of such `a` under multiplication is the identity
-   `(z₁² − by₁²)(z₂² − by₂²) = (z₁z₂ + by₁y₂)² − b(z₁y₂ + z₂y₁)²`, i.e. multiplicativity of
-   the norm.
--/
-
-
-/- # 2.1 DEFINITION OF THE HILBERT SYMBOL -/
-
-
---*Definition 2.1.1 : The Hilbert solvability condition — z² = ax² + by² has a nontrivial solution*
-def HilbertSolvable (K : Type*) [Field K] (a b : K) : Prop :=
-  ∃ z x y : K, (z ≠ 0 ∨ x ≠ 0 ∨ y ≠ 0) ∧ z ^ 2 = a * x ^ 2 + b * y ^ 2
-
---*Definition 2.1.2 : The Hilbert symbol (a,b) ∈ ℤˣ of two units of a field*
-noncomputable def hilbertSym (K : Type*) [Field K] (a b : Kˣ) : ℤˣ := by
-  classical
-  exact if HilbertSolvable K a b then 1 else -1
-
-
-/- # 2.2 TRANSFER LEMMAS -/
-
-
---*Lemma 2.2.1 : The Hilbert symbol equals 1 iff the conic equation has a nontrivial solution*
-lemma hilbertSym_eq_one_iff (a b : Kˣ) : hilbertSym K a b = 1 ↔ HilbertSolvable K a b := by
-  unfold hilbertSym
-  by_cases hs : HilbertSolvable K a b
-  · rw [if_pos hs]
-    grind
-  · rw [if_neg hs]
-    simp_all
-
---*Lemma 2.2.2 : The Hilbert symbol equals -1 iff the conic equation has no nontrivial solution*
-lemma hilbertSym_eq_neg_one_iff (a b : Kˣ) :
-    hilbertSym K a b = -1 ↔ ¬ HilbertSolvable K a b := by
-  unfold hilbertSym
-  by_cases hs : HilbertSolvable K a b
-  · rw [if_pos hs]
-    simp_all
-  · rw [if_neg hs]
-    simp_all
-
---*Lemma 2.2.3 : Solvability is invariant under multiplying the first entry by a square*
-lemma hilbertSolvable_mul_sq (a b c : Kˣ) :
-    HilbertSolvable K ((a * c ^ 2 : Kˣ) : K) (b : K) ↔ HilbertSolvable K (a : K) (b : K) := by
-  constructor
-  · rintro ⟨z, x, y, hnt, heq⟩
-    refine ⟨z, (c : K) * x, y, ?_, ?_⟩
-    simp_all
-    rw [heq]
-    push_cast
-    ring
-  · rintro ⟨z, x, y, hnt, heq⟩
-    refine ⟨(c : K) * z, x, (c : K) * y, ?_, ?_⟩
-    simp_all
-    push_cast
-    grind
-
-
-/- # 2.3 PROPERTIES OF THE HILBERT SYMBOL -/
-
-variable (K) (a b : Kˣ)
-
-
---*(†) Lemma 2.3.1 : The Hilbert symbol is symmetric*
-lemma hilbertSym_comm : hilbertSym K a b = hilbertSym K b a := by
-  have h : ∀ c d : K, HilbertSolvable K c d → HilbertSolvable K d c := by
-    intro c d ⟨z, x, y, hnt, heq⟩
-    exact ⟨z, y, x, by grind, by grind⟩
-  unfold hilbertSym
-  by_cases hab : HilbertSolvable K a b
-  · rw [if_pos hab, if_pos (h a b hab)]
-  · rw [if_neg hab, if_neg (fun hba => hab (h b a hba))]
-
---*Lemma 2.3.2 : The Hilbert symbol with 1 in the first entry equals 1*
-lemma hilbertSym_one_left : hilbertSym K 1 a = 1 := by
-  have h : HilbertSolvable K 1 a := by
-    refine ⟨1, 1, 0, ?_, ?_⟩
-    simp
-    ring
-  exact if_pos h
-
---*Lemma 2.3.3 : The Hilbert symbol with 1 in the second entry equals 1*
-lemma hilbertSym_one_right : hilbertSym K b 1 = 1 := by
-  have h : HilbertSolvable K b 1 := by
-    refine ⟨1, 0, 1, ?_, ?_⟩
-    simp
-    ring
-  exact if_pos h
-
---*(†) Lemma 2.3.4 : (a, −a) = 1*
-lemma hilbertSym_neg_self : hilbertSym K a (-a) = 1 := by
-  have h : HilbertSolvable K a (-a) := by
-    refine ⟨0, 1, 1, ?_, ?_⟩
-    simp
-    ring
-  exact if_pos h
-
---*Lemma 2.3.5 : (a, 1 − a) = 1 for a ≠ 1*
-lemma hilbertSym_one_sub (ha : a.val ≠ 1) :
-    hilbertSym K a (Units.mk0 (1 - a) (by grind)) = 1 := by
-  have h : HilbertSolvable K a (1 - a) := by
-    refine ⟨1, 1, 1, ?_, ?_⟩
-    simp
-    ring
-  exact if_pos h
-
---*Lemma 2.3.6 : (a, b) = 1 whenever a is a square*
-lemma hilbertSym_of_isSquare (ha : IsSquare a) (b : Kˣ) : hilbertSym K a b = 1 := by
-  obtain ⟨c, rfl⟩ := ha
-  have h : HilbertSolvable K (c * c) b := by
-    refine ⟨c, 1, 0, ?_, ?_⟩
-    simp
-    ring
-  exact if_pos h
-
---*Lemma 2.3.7 : (a, a) = (a, −1)*
-lemma hilbertSym_self : hilbertSym K a a = hilbertSym K a (-1) := by
-  have h : HilbertSolvable K a a ↔ HilbertSolvable K a (-1) := by
-    constructor
-    · rintro ⟨z, x, y, hnt, heq⟩
-      refine ⟨a * x, z, a * y, by aesop, by grind⟩
-    · rintro ⟨z, x, y, hnt, heq⟩
-      refine ⟨a * x, z, y, by aesop, by grind⟩
-  unfold hilbertSym
-  by_cases hsolv : HilbertSolvable K a a
-  · simp_all
-  · simp_all
-
---*Lemma 2.3.8 : Hilbert symbols agree when the two solvability conditions are equivalent*
-lemma hilbertSym_congr (a b a' b' : Kˣ)
-    (h : HilbertSolvable K a b ↔ HilbertSolvable K a' b') :
-    hilbertSym K a b = hilbertSym K a' b' := by
-  unfold hilbertSym
-  grind
-
---*(†) Lemma 2.3.9 : Square invariance in the first entry, (a c², b) = (a, b)*
-lemma hilbertSym_mul_sq_left (a b c : Kˣ) : hilbertSym K (a * c ^ 2) b = hilbertSym K a b := by
-  grind only [hilbertSym_congr, hilbertSolvable_mul_sq]
-
---*(†) Lemma 2.3.10 : Square invariance in the second entry, (a, b c²) = (a, b)*
-lemma hilbertSym_mul_sq_right (a b c : Kˣ) :
-    hilbertSym K a (b * c ^ 2) = hilbertSym K a b := by
-  grind only [hilbertSym_comm, hilbertSym_mul_sq_left]
-
-
-/- # 2.4 THE NORM FORM AND ITS CANCELLATION PROPERTIES -/
-
-
---*Lemma 2.4.1 : Norm form of Definition 2.1.1 — solvable iff b is a square or a = z² − b y²*
-lemma hilbertSolvable_iff_sq_or_norm :
-    HilbertSolvable K a b ↔ (∃ c : K, (b : K) = c ^ 2) ∨ ∃ z y : K, (a : K) = z ^ 2 - b * y ^ 2 := by
-  constructor
-  · rintro ⟨z, x, y, hnt, heq⟩
-    by_cases hx : x = 0
-    · subst hx
-      have hy : y ≠ 0 := by
-        rintro rfl
-        have hz : z = 0 := by
-          have h0 : z ^ 2 = 0 := by
-            rw [heq]
-            ring
-          exact eq_zero_of_pow_eq_zero h0
-        simp [hz] at hnt
-      left
-      refine ⟨z / y, ?_⟩
-      rw [div_pow, eq_div_iff (pow_ne_zero 2 hy), heq]
-      ring
-    · right
-      refine ⟨z / x, y / x, ?_⟩
-      rw [div_pow, div_pow, ← mul_div_assoc, ← sub_div, eq_div_iff (pow_ne_zero 2 hx), heq]
-      ring
-  · rintro (⟨c, hc⟩ | ⟨z, y, hzy⟩)
-    · exact ⟨c, 0, 1, Or.inr (Or.inr one_ne_zero), by rw [hc]; ring⟩
-    · exact ⟨z, 1, y, Or.inr (Or.inl one_ne_zero), by rw [hzy]; ring⟩
-
---*Lemma 2.4.2 : Solvability is closed under multiplication in the first entry (norms form a subgroup)*
-variable {K} in
-lemma hilbertSolvable_mul_left {a a' b : Kˣ} (h : HilbertSolvable K a b)
-    (h' : HilbertSolvable K a' b) : HilbertSolvable K ((a * a' : Kˣ) : K) b := by
-  rw [hilbertSolvable_iff_sq_or_norm] at h h' ⊢
-  rcases h with hb | ⟨z, y, hzy⟩
-  · exact Or.symm (Or.inr hb)
-  rcases h' with hb | ⟨z', y', hz'y'⟩
-  · exact Or.symm (Or.inr hb)
-  refine Or.inr ⟨z * z' + (b : K) * y * y', z * y' + z' * y, ?_⟩
-  push_cast
-  rw [hzy, hz'y']
-  ring
-
---*Lemma 2.4.3 : Cancellation 1 — (a,b) = 1 ⟹ (a c, b) = (c, b) (Serre Prop 2 (iii))*
-lemma hilbertSym_mul_left_of_eq_one {a b : Kˣ} (h : hilbertSym K a b = 1) (c : Kˣ) :
-    hilbertSym K (a * c) b = hilbertSym K c b := by
-  rw [hilbertSym_eq_one_iff] at h
-  apply hilbertSym_congr
-  constructor
-  · intro hac
-    have h2 := hilbertSolvable_mul_left hac h
-    have h3 : a * c * a = c * a ^ 2 := by
-      rw [sq, mul_comm a c, mul_assoc]
-    rw [h3] at h2
-    grind only [hilbertSolvable_mul_sq]
-  · intro ha
-    grind only [hilbertSolvable_mul_left]
-
---*Lemma 2.4.4 : Cancellation 2 — (a, −a b) = (a, b) (Serre Prop 2 (iv))*
-lemma hilbertSym_neg_self_mul {a b : Kˣ} : hilbertSym K a (-a * b) = hilbertSym K a b := by
-  have h : hilbertSym K (-a) a = 1 := by
-    grind only [hilbertSym_comm, hilbertSym_neg_self]
-  grind only [hilbertSym_comm, hilbertSym_mul_left_of_eq_one]
-
-
-/- # SECTION 3 : SOME p-ADIC MACHINERY -/
-/-
-**(1) What this section does and design discussion :** Every `a ∈ ℚ_pˣ` is uniquely expressed as
-`a = p^{v(a)} · u` with `u ∈ ℤ_pˣ` (Serre II.1.2). This section packages that decomposition for the
-explicit formula of Section 4, since most of these lemmas do not exist in Mathlib in this form.
-We read off `a ∈ ℚ_pˣ` as :
-1) The valuation `valuationUnits a : ℤ` → Section 3.1
-2) The uniformiser `uniformiser p : ℚ_pˣ` → Section 3.2
-3) The unit part `unitPart a : ℤ_pˣ` → Section 3.3
-and finally its residue class mod `p`,
-4) `unitPartZMod a : (ℤ/p)ˣ` → Section 3.4
-Each subsection records multiplicativity and the values at `1` and `−1`.
-
-**(2) Why we need it :** In Section 4 the explicit formulas `formulaOdd` and `formulaTwo` are
-functions of `(valuationUnits a, unitPartZMod a)`. Defining these pieces individually gives a
-cleaner way of computing the formula than working directly with Mathlib's `Padic.valuation` and
-`PadicInt.toZMod`, which was messy and hard to track in the InfoView. The last subsection
-formalises the first step of Serre's proof of Thm 1 (III.1.2): since the symbol depends only on
-classes mod squares, it suffices to compare `hilbertSym` and a formula `F` on pairs with
-valuations in `{0,1}`.
--/
-
-namespace Padic
-
-variable {p : ℕ} [Fact p.Prime]
-
-
-/- # 3.1 THE p-ADIC VALUATION vₚ ON ℚ_pˣ -/
-
-
---*Definition 3.1.1 : The p-adic valuation of a unit of ℚ_p, as an integer*
-noncomputable def valuationUnits (a : ℚ_[p]ˣ) : ℤ := Padic.valuation (a : ℚ_[p])
-
---*Lemma 3.1.1 : The valuation is a homomorphism ℚ_pˣ → ℤ*
-lemma valuationUnits_mul (a b : ℚ_[p]ˣ) :
-    valuationUnits (a * b) = valuationUnits a + valuationUnits b := by
-  unfold valuationUnits
-  simp only [Units.val_mul, ne_eq, Units.ne_zero, not_false_eq_true, Padic.valuation_mul]
-
---*Lemma 3.1.2 : The valuation of 1 is 0*
-lemma valuationUnits_one : valuationUnits (1 : ℚ_[p]ˣ) = 0 := Padic.valuation_one
-
---*Lemma 3.1.3 : The valuation of an inverse*
-lemma valuationUnits_inv (a : ℚ_[p]ˣ) : valuationUnits a⁻¹ = -valuationUnits a := by
-  unfold valuationUnits
-  simp only [Units.val_inv_eq_inv_val, Padic.valuation_inv]
-
---*Lemma 3.1.4 : The valuation of a natural power*
-lemma valuationUnits_pow (a : ℚ_[p]ˣ) (n : ℕ) : valuationUnits (a ^ n) = n * valuationUnits a := by
-  unfold valuationUnits
-  simp only [Units.val_pow_eq_pow_val, Padic.valuation_pow]
-
---*Lemma 3.1.5 : The valuation of an integer power*
-lemma valuationUnits_zpow (a : ℚ_[p]ˣ) (n : ℤ) :
-    valuationUnits (a ^ n) = n * valuationUnits a := by
-  unfold valuationUnits
-  simp only [Units.val_zpow_eq_zpow_val, Padic.valuation_zpow]
-
---*Lemma 3.1.6 : The valuation of -1 is 0*
-lemma valuationUnits_neg_one : valuationUnits (-1 : ℚ_[p]ˣ) = 0 := by
-  have h := valuationUnits_pow (-1 : ℚ_[p]ˣ) 2
-  rw [neg_one_sq, valuationUnits_one] at h
-  push_cast at h
-  grind
-
---*Lemma 3.1.7 : The valuation of an additive inverse*
-lemma valuationUnits_neg (a : ℚ_[p]ˣ) : valuationUnits (-a) = valuationUnits a := by
-  rw [← neg_one_mul, valuationUnits_mul, valuationUnits_neg_one, zero_add]
-
-
-/- # 3.2 THE UNIFORMISER p IN ℚ_pˣ -/
-
-
---*Definition 3.2.1 : The uniformiser p ∈ ℚ_pˣ*
-noncomputable def uniformiser (p : ℕ) [Fact p.Prime] : ℚ_[p]ˣ :=
-  Units.mk0 (p : ℚ_[p]) (Nat.cast_ne_zero.mpr (Fact.out (p := p.Prime)).ne_zero)
-
---*Lemma 3.2.1 : The uniformiser viewed in ℚ_p is p (sanity check)*
-lemma val_uniformiser : ((uniformiser p : ℚ_[p]ˣ) : ℚ_[p]) = p := by rfl
-
---*Lemma 3.2.2 : The valuation of the uniformiser is 1*
-lemma valuationUnits_uniformiser : valuationUnits (uniformiser p) = 1 := Padic.valuation_p
-
-
-/- # 3.3 THE UNIT PART OF a = p^{v(a)} · u IN ℚ_pˣ -/
-
-
---*Lemma 3.3.1 : x / p^{v(x)} has norm 1, hence is a unit of ℤ_p*
-lemma norm_div_p_zpow_valuation (x : ℚ_[p]) (hx : x ≠ 0) :
-    ‖x / (p : ℚ_[p]) ^ (Padic.valuation x)‖ = 1 := by
-  simp only [norm_div, Padic.norm_p_zpow, zpow_neg, div_inv_eq_mul]
-  simp [hx, Padic.norm_eq_zpow_neg_valuation, zpow_ne_zero, NeZero.ne]
-
---*Definition 3.3.1 : The unit part u ∈ ℤ_pˣ of a ∈ ℚ_pˣ*
-noncomputable def unitPart (a : ℚ_[p]ˣ) : ℤ_[p]ˣ :=
-  PadicInt.mkUnits (norm_div_p_zpow_valuation (a : ℚ_[p]) a.ne_zero)
-
---*Lemma 3.3.2 : The unit part viewed in ℚ_p is a / p^{v(a)} (sanity check)*
-lemma coe_unitPart (a : ℚ_[p]ˣ) :
-    ((unitPart a : ℤ_[p]) : ℚ_[p]) = (a : ℚ_[p]) / (p : ℚ_[p]) ^ valuationUnits a := rfl
-
---*Lemma 3.3.3 : The unit part is multiplicative*
-lemma unitPart_mul (a b : ℚ_[p]ˣ) : unitPart (a * b) = unitPart a * unitPart b := by
-  have hp0 : (p : ℚ_[p]) ≠ 0 := Nat.cast_ne_zero.mpr (Fact.out (p := p.Prime)).ne_zero
-  apply Units.ext
-  apply Subtype.ext
-  push_cast
-  rw [coe_unitPart (a * b), coe_unitPart a, coe_unitPart b, valuationUnits_mul, zpow_add₀ hp0,
-    Units.val_mul, div_mul_div_comm]
-
---*Lemma 3.3.4 : The unit part of 1 is 1*
-lemma unitPart_one : unitPart (1 : ℚ_[p]ˣ) = 1 := by
-  have h := unitPart_mul (1 : ℚ_[p]ˣ) 1
-  rw [mul_one] at h
-  exact right_eq_mul.mp h
-
---*Lemma 3.3.5 : The unit part of -1 is -1*
-lemma unitPart_neg_one : unitPart (-1 : ℚ_[p]ˣ) = -1 := by
-  apply Units.ext
-  apply Subtype.ext
-  rw [coe_unitPart, valuationUnits_neg_one, zpow_zero, div_one]
-  simp only [Units.val_neg, Units.val_one, PadicInt.coe_neg, PadicInt.coe_one]
-
---*Lemma 3.3.6 : If v(a) = 0 then the unit part of a is a itself*
-lemma coe_unitPart_of_valuationUnits_eq_zero {a : ℚ_[p]ˣ} (ha : valuationUnits a = 0) :
-    ((unitPart a : ℤ_[p]) : ℚ_[p]) = (a : ℚ_[p]) := by
-  rw [coe_unitPart, ha, zpow_zero, div_one]
-
---*Lemma 3.3.7 : If v(a) = 1 then the unit part of a is a / p, i.e. a = p · unitPart a*
-lemma coe_unitPart_of_valuationUnits_eq_one {a : ℚ_[p]ˣ} (ha : valuationUnits a = 1) :
-    ((unitPart a : ℤ_[p]) : ℚ_[p]) = (a : ℚ_[p]) / p := by
-  rw [coe_unitPart, ha, zpow_one]
-
-
-/- # 3.4 THE RESIDUE MOD p OF THE UNIT PART IN (ℤ/p)ˣ -/
-
-
---*Definition 3.4.1 : The residue mod p of the unit part of a ∈ ℚ_pˣ*
-noncomputable def unitPartZMod (a : ℚ_[p]ˣ) : (ZMod p)ˣ :=
-  Units.map (PadicInt.toZMod (p := p)).toMonoidHom (unitPart a)
-
---*Lemma 3.4.1 : The residue viewed in ℤ/p is the reduction of the unit part (sanity check)*
-lemma coe_unitPartZMod (a : ℚ_[p]ˣ) :
-    ((unitPartZMod a : (ZMod p)ˣ) : ZMod p) = PadicInt.toZMod (unitPart a : ℤ_[p]) := rfl
-
---*Lemma 3.4.2 : The residue of the unit part is multiplicative*
-lemma unitPartZMod_mul (a b : ℚ_[p]ˣ) : unitPartZMod (a * b) = unitPartZMod a * unitPartZMod b := by
-  unfold unitPartZMod
-  rw [unitPart_mul, map_mul]
-
---*Lemma 3.4.3 : The residue of the unit part of 1 is 1*
-lemma unitPartZMod_one : unitPartZMod (1 : ℚ_[p]ˣ) = 1 := by
-  unfold unitPartZMod
-  rw [unitPart_one, map_one]
-
---*Lemma 3.4.4 : The residue of the unit part of -1 is -1*
-lemma unitPartZMod_neg_one : unitPartZMod (-1 : ℚ_[p]ˣ) = -1 := by
-  apply Units.ext
-  simp [unitPartZMod, unitPart_neg_one]
-
---*Lemma 3.4.5 : The residue of the unit part of -a is unitPartZMod (-1) · unitPartZMod a*
-lemma unitPartZMod_neg (a : ℚ_[p]ˣ) : unitPartZMod (-a) = unitPartZMod (-1) * unitPartZMod a := by
-  rw [← unitPartZMod_mul, neg_one_mul]
-
-
-/- # 3.5 REDUCTION TO VALUATIONS IN {0, 1} (Serre III.1.2) -/
-
-
---*Lemma 3.5.1 : Every a ∈ ℚ_pˣ is (an element of valuation 0 or 1) × (a square)*
-lemma exists_eq_mul_sq (a : ℚ_[p]ˣ) :
-    ∃ b c : ℚ_[p]ˣ, a = b * c ^ 2 ∧ (valuationUnits b = 1 ∨ valuationUnits b = 0) := by
-  obtain ⟨k, hk⟩ := Int.even_or_odd' (valuationUnits a)
-  refine ⟨a * ((uniformiser p ^ k)⁻¹) ^ 2, uniformiser p ^ k, ?_, ?_⟩
-  · rw [mul_assoc, ← mul_pow, inv_mul_cancel, one_pow, mul_one]
-  · rw [valuationUnits_mul, sq, valuationUnits_mul, valuationUnits_inv, valuationUnits_zpow,
-      valuationUnits_uniformiser]
-    grind
-
---*Lemma 3.5.2 : Reduction principle — a symmetric, square-invariant F that agrees with the*
---*Hilbert symbol whenever (v a, v b) ∈ {(0,0), (1,0), (1,1)} agrees with it everywhere*
-lemma hilbertSym_eq_of_valuationUnits_cases (F : ℚ_[p]ˣ → ℚ_[p]ˣ → ℤˣ)
-    (hsymm : ∀ a b, F a b = F b a)
-    (hsq : ∀ a c b, F (a * c ^ 2) b = F a b)
-    (h00 : ∀ a b, valuationUnits a = 0 → valuationUnits b = 0 → hilbertSym ℚ_[p] a b = F a b)
-    (h10 : ∀ a b, valuationUnits a = 1 → valuationUnits b = 0 → hilbertSym ℚ_[p] a b = F a b)
-    (h11 : ∀ a b, valuationUnits a = 1 → valuationUnits b = 1 → hilbertSym ℚ_[p] a b = F a b) :
-    hilbertSym ℚ_[p] = F := by
-  have hsq' : ∀ a b c, F a (b * c ^ 2) = F a b :=
-    fun a b c => (hsymm _ _).trans ((hsq _ _ _).trans (hsymm _ _))
-  funext a b
-  obtain ⟨a', c, rfl, ha⟩ := exists_eq_mul_sq a
-  obtain ⟨b', d, rfl, hb⟩ := exists_eq_mul_sq b
-  rw [hilbertSym_mul_sq_left, hilbertSym_mul_sq_right, hsq, hsq']
-  rcases ha with ha | ha <;> rcases hb with hb | hb
-  · exact h11 a' b' ha hb
-  · exact h10 a' b' ha hb
-  · rw [hilbertSym_comm, hsymm]
-    exact h10 b' a' hb ha
-  · exact h00 a' b' ha hb
-
+import Mathlib.Algebra.Order.Ring.Star
+import Mathlib.NumberTheory.Padics.RingHoms
+import Mathlib.NumberTheory.Padics.Hensel
 
 /- # SECTION 4 : THE EXPLICIT FORMULA FOR THE HILBERT SYMBOL AT p = 2 OR p ODD -/
 /-
@@ -603,22 +29,24 @@ sign. Defining these via Mathlib's quadratic characters and a sign homomorphism 
 their properties are already in Mathlib and avoids long formulae crowding the tactic state.
 -/
 
-
 /- # 4.1 THE LEGENDRE SYMBOL AS A QUADRATIC CHARACTER -/
 
+namespace Padic
 
---*Definition 4.1.1 : The Legendre symbol as the unit-valued quadratic character (ℤ/p)ˣ →* ℤˣ*
+variable {p : ℕ } [Fact p.Prime]
+
+/--*Definition 4.1.1 : The Legendre symbol as the unit-valued quadratic character (ℤ/p)ˣ →* ℤˣ*--/
 noncomputable def quadraticCharUnits (p : ℕ) [Fact p.Prime] : (ZMod p)ˣ →* ℤˣ :=
   (quadraticChar (ZMod p)).toUnitHom
 
---*Lemma 4.1.1 : The Legendre symbol of a unit equals 1 iff it is a square in ℤ/p*
+/--*Lemma 4.1.1 : The Legendre symbol of a unit equals 1 iff it is a square in ℤ/p*--/
 lemma quadraticCharUnits_eq_one_iff (w : (ZMod p)ˣ) :
     quadraticCharUnits p w = 1 ↔ IsSquare (w : ZMod p) := by
   rw [← quadraticChar_one_iff_isSquare w.ne_zero, ← Units.val_eq_one]
   unfold quadraticCharUnits
   simp
 
---*Lemma 4.1.2 : The Legendre symbol of a unit equals -1 iff it is not a square in ℤ/p*
+/--*Lemma 4.1.2 : The Legendre symbol of a unit equals -1 iff it is not a square in ℤ/p*--/
 lemma quadraticCharUnits_eq_neg_one_iff (w : (ZMod p)ˣ) :
     quadraticCharUnits p w = -1 ↔ ¬ IsSquare (w : ZMod p) := by
   rw [← quadraticCharUnits_eq_one_iff]
@@ -630,23 +58,21 @@ lemma quadraticCharUnits_eq_neg_one_iff (w : (ZMod p)ˣ) :
     · solve_by_elim
     · grind
 
-
 /- # 4.2 THE EXPLICIT FORMULA FOR ODD p AND ITS PROPERTIES -/
 
-
---*Definition 4.2.1 : Explicit formula for the Hilbert symbol at odd p (Serre III.1.2, Thm 1)*
-private noncomputable def formulaOdd (a b : ℚ_[p]ˣ) : ℤˣ :=
+/--*Definition 4.2.1 : Explicit formula for the Hilbert symbol at odd p (Serre III.1.2, Thm 1)*--/
+noncomputable def formulaOdd (a b : ℚ_[p]ˣ) : ℤˣ :=
   quadraticCharUnits p (-1) ^ (valuationUnits a * valuationUnits b)
     * quadraticCharUnits p (unitPartZMod b) ^ valuationUnits a
     * quadraticCharUnits p (unitPartZMod a) ^ valuationUnits b
 
---*Lemma 4.2.1 : formulaOdd is symmetric*
+/--*Lemma 4.2.1 : formulaOdd is symmetric*--/
 lemma formulaOdd_comm (a b : ℚ_[p]ˣ) : formulaOdd a b = formulaOdd b a := by
   unfold formulaOdd
   rw [mul_comm (valuationUnits a) (valuationUnits b)]
   ac_rfl
 
---*Lemma 4.2.2 : formulaOdd is multiplicative in the first entry*
+/--*Lemma 4.2.2 : formulaOdd is multiplicative in the first entry*--/
 lemma formulaOdd_mul_left (a a' b : ℚ_[p]ˣ) :
     formulaOdd (a * a') b = formulaOdd a b * formulaOdd a' b := by
   unfold formulaOdd
@@ -665,109 +91,105 @@ lemma formulaOdd_mul_left (a a' b : ℚ_[p]ˣ) :
   rw [h1, h2, h3]
   ac_rfl
 
---*Lemma 4.2.3 : formulaOdd is multiplicative in the second entry*
+/--*Lemma 4.2.3 : formulaOdd is multiplicative in the second entry*--/
 lemma formulaOdd_mul_right (a b b' : ℚ_[p]ˣ) :
     formulaOdd a (b * b') = formulaOdd a b * formulaOdd a b' := by
   rw [formulaOdd_comm, formulaOdd_mul_left, formulaOdd_comm b a, formulaOdd_comm b' a]
 
---*Lemma 4.2.4 : formulaOdd is bimultiplicative*
+/--*Lemma 4.2.4 : formulaOdd is bimultiplicative*--/
 lemma formulaOdd_isSqBimult : IsSqBimult (formulaOdd (p := p)) :=
   ⟨formulaOdd_mul_left, formulaOdd_mul_right⟩
 
---*Lemma 4.2.5 : Square invariance of formulaOdd in the first entry*
+/--*Lemma 4.2.5 : Square invariance of formulaOdd in the first entry*--/
 lemma formulaOdd_mul_sq_left (a c b : ℚ_[p]ˣ) : formulaOdd (a * c ^ 2) b = formulaOdd a b :=
   formulaOdd_isSqBimult.mul_sq_left a b c
 
---*Lemma 4.2.6 : Square invariance of formulaOdd in the second entry*
+/--*Lemma 4.2.6 : Square invariance of formulaOdd in the second entry*--/
 lemma formulaOdd_mul_sq_right (a b c : ℚ_[p]ˣ) : formulaOdd a (b * c ^ 2) = formulaOdd a b :=
   formulaOdd_isSqBimult.mul_sq_right a b c
 
-
 /- # 4.3 RESIDUES MOD 4 AND 8, AND ε, ω, sgn FOR THE p = 2 CASE -/
 
-
---*Definition 4.3.1 : The residue mod 4 of the unit part of a 2-adic number*
+/--*Definition 4.3.1 : The residue mod 4 of the unit part of a 2-adic number*--/
 private noncomputable def unitPartZMod4 (a : ℚ_[2]ˣ) : (ZMod 4)ˣ :=
   Units.map (PadicInt.toZModPow 2).toMonoidHom (unitPart a)
 
---*Lemma 4.3.1 : The residue mod 4 viewed in ℤ/4 is the reduction mod 4 of the unit part*
+/--*Lemma 4.3.1 : The residue mod 4 viewed in ℤ/4 is the reduction mod 4 of the unit part*--/
 lemma coe_unitPartZMod4 (a : ℚ_[2]ˣ) :
     ((unitPartZMod4 a : (ZMod 4)ˣ) : ZMod 4) = PadicInt.toZModPow 2 (unitPart a : ℤ_[2]) := rfl
 
---*Lemma 4.3.2 : The residue mod 4 is multiplicative*
+/--*Lemma 4.3.2 : The residue mod 4 is multiplicative*--/
 lemma unitPartZMod4_mul (a b : ℚ_[2]ˣ) :
     unitPartZMod4 (a * b) = unitPartZMod4 a * unitPartZMod4 b := by
   unfold unitPartZMod4
   rw [unitPart_mul, map_mul]
 
---*Definition 4.3.2 : The residue mod 8 of the unit part of a 2-adic number*
+/--*Definition 4.3.2 : The residue mod 8 of the unit part of a 2-adic number*--/
 private noncomputable def unitPartZMod8 (a : ℚ_[2]ˣ) : (ZMod 8)ˣ :=
   Units.map (PadicInt.toZModPow 3).toMonoidHom (unitPart a)
 
---*Lemma 4.3.3 : The residue mod 8 viewed in ℤ/8 is the reduction mod 8 of the unit part*
+/--*Lemma 4.3.3 : The residue mod 8 viewed in ℤ/8 is the reduction mod 8 of the unit part*--/
 lemma coe_unitPartZMod8 (a : ℚ_[2]ˣ) :
     ((unitPartZMod8 a : (ZMod 8)ˣ) : ZMod 8) = PadicInt.toZModPow 3 (unitPart a : ℤ_[2]) := rfl
 
---*Lemma 4.3.4 : The residue mod 8 is multiplicative*
+/--*Lemma 4.3.4 : The residue mod 8 is multiplicative*--/
 lemma unitPartZMod8_mul (a b : ℚ_[2]ˣ) :
     unitPartZMod8 (a * b) = unitPartZMod8 a * unitPartZMod8 b := by
   unfold unitPartZMod8
   rw [unitPart_mul, map_mul]
 
---*Definition 4.3.3 : ε(a) ∈ ℤ/2, with ε(a) = 0 ↔ unit part of a ≡ 1 (mod 4)*
+/--*Definition 4.3.3 : ε(a) ∈ ℤ/2, with ε(a) = 0 ↔ unit part of a ≡ 1 (mod 4)*--/
 noncomputable def epsilon2 (a : ℚ_[2]ˣ) : ZMod 2 := if unitPartZMod4 a = 1 then 0 else 1
 
---*Lemma 4.3.5 : Finite check on (ℤ/4)ˣ that ε is additive (Serre III.1.2)*
-private lemma epsilon2_aux : ∀ u v : (ZMod 4)ˣ,
+/--*Lemma 4.3.5 : Finite check on (ℤ/4)ˣ that ε is additive (Serre III.1.2)*--/
+lemma epsilon2_aux : ∀ u v : (ZMod 4)ˣ,
     (if u * v = 1 then (0 : ZMod 2) else 1)
       = (if u = 1 then (0 : ZMod 2) else 1) + (if v = 1 then 0 else 1) := by
   decide
 
---*Lemma 4.3.6 : ε is a homomorphism (ℚ_2ˣ, ·) → (ℤ/2, +)*
+/--*Lemma 4.3.6 : ε is a homomorphism (ℚ_2ˣ, ·) → (ℤ/2, +)*--/
 lemma epsilon2_mul (a b : ℚ_[2]ˣ) : epsilon2 (a * b) = epsilon2 a + epsilon2 b := by
   unfold epsilon2
   rw [unitPartZMod4_mul]
   exact epsilon2_aux (unitPartZMod4 a) (unitPartZMod4 b)
 
---*Definition 4.3.4 : ω(a) ∈ ℤ/2, with ω(a) = 0 ↔ unit part of a ≡ ±1 (mod 8)*
+/--*Definition 4.3.4 : ω(a) ∈ ℤ/2, with ω(a) = 0 ↔ unit part of a ≡ ±1 (mod 8)*--/
 noncomputable def omega2 (a : ℚ_[2]ˣ) : ZMod 2 :=
   if unitPartZMod8 a = 1 ∨ unitPartZMod8 a = -1 then 0 else 1
 
---*Lemma 4.3.7 : Finite check on (ℤ/8)ˣ that ω is additive (Serre III.1.2)*
-private lemma omega2_aux : ∀ u v : (ZMod 8)ˣ,
+/--*Lemma 4.3.7 : Finite check on (ℤ/8)ˣ that ω is additive (Serre III.1.2)*--/
+lemma omega2_aux : ∀ u v : (ZMod 8)ˣ,
     (if u * v = 1 ∨ u * v = -1 then (0 : ZMod 2) else 1)
       = (if u = 1 ∨ u = -1 then (0 : ZMod 2) else 1)
         + (if v = 1 ∨ v = -1 then (0 : ZMod 2) else 1) := by
   decide
 
---*Lemma 4.3.8 : ω is a homomorphism (ℚ_2ˣ, ·) → (ℤ/2, +)*
+/--*Lemma 4.3.8 : ω is a homomorphism (ℚ_2ˣ, ·) → (ℤ/2, +)*--/
 lemma omega2_mul (a b : ℚ_[2]ˣ) : omega2 (a * b) = omega2 a + omega2 b := by
   unfold omega2
   rw [unitPartZMod8_mul]
   exact omega2_aux (unitPartZMod8 a) (unitPartZMod8 b)
 
---*Definition 4.3.5 : The sign map (ℤ/2, +) → ({±1}, ·), t ↦ (−1)^t*
+/--*Definition 4.3.5 : The sign map (ℤ/2, +) → ({±1}, ·), t ↦ (−1)^t*--/
 def sgn : ZMod 2 → ℤˣ := fun t => if t = 0 then 1 else -1
 
---*Lemma 4.3.9 : sgn is a homomorphism, sgn (s + t) = sgn s · sgn t (sanity check)*
+/--*Lemma 4.3.9 : sgn is a homomorphism, sgn (s + t) = sgn s · sgn t (sanity check)*--/
 lemma sgn_add : ∀ s t : ZMod 2, sgn (s + t) = sgn s * sgn t := by decide
-
 
 /- # 4.4 THE EXPLICIT FORMULA FOR p = 2 AND ITS PROPERTIES -/
 
-
---*Definition 4.4.1 : Explicit formula for the Hilbert symbol at p = 2 (Serre III.1.2, Thm 1)*
-private noncomputable def formulaTwo (a b : ℚ_[2]ˣ) : ℤˣ :=
+/--*Definition 4.4.1 : Explicit formula for the Hilbert symbol at p = 2 (Serre III.1.2, Thm 1)*--/
+noncomputable def formulaTwo (a b : ℚ_[2]ˣ) : ℤˣ :=
   sgn (epsilon2 a * epsilon2 b + (valuationUnits a : ZMod 2) * omega2 b
     + (valuationUnits b : ZMod 2) * omega2 a)
 
---*Lemma 4.4.1 : formulaTwo is symmetric*
+/--*Lemma 4.4.1 : formulaTwo is symmetric*--/
 lemma formulaTwo_comm (a b : ℚ_[2]ˣ) : formulaTwo a b = formulaTwo b a := by
   unfold formulaTwo
   congr 1
   ring
 
---*Lemma 4.4.2 : formulaTwo is multiplicative in the first entry*
+/--*Lemma 4.4.2 : formulaTwo is multiplicative in the first entry*--/
 lemma formulaTwo_mul_left (a a' b : ℚ_[2]ˣ) :
     formulaTwo (a * a') b = formulaTwo a b * formulaTwo a' b := by
   unfold formulaTwo
@@ -776,19 +198,19 @@ lemma formulaTwo_mul_left (a a' b : ℚ_[2]ˣ) :
   rw [epsilon2_mul, omega2_mul, valuationUnits_mul]
   grind
 
---*Lemma 4.4.3 : formulaTwo is multiplicative in the second entry*
+/--*Lemma 4.4.3 : formulaTwo is multiplicative in the second entry*--/
 lemma formulaTwo_mul_right (a b b' : ℚ_[2]ˣ) :
     formulaTwo a (b * b') = formulaTwo a b * formulaTwo a b' := by
   grind only [formulaTwo_comm, formulaTwo_mul_left]
 
---*Lemma 4.4.4 : formulaTwo is bimultiplicative*
+/--*Lemma 4.4.4 : formulaTwo is bimultiplicative*--/
 lemma formulaTwo_isSqBimult : IsSqBimult formulaTwo := ⟨formulaTwo_mul_left, formulaTwo_mul_right⟩
 
---*Lemma 4.4.5 : Square invariance of formulaTwo in the first entry*
+/--*Lemma 4.4.5 : Square invariance of formulaTwo in the first entry*--/
 lemma formulaTwo_mul_sq_left (a c b : ℚ_[2]ˣ) : formulaTwo (a * c ^ 2) b = formulaTwo a b :=
   formulaTwo_isSqBimult.mul_sq_left a b c
 
---*Lemma 4.4.6 : Square invariance of formulaTwo in the second entry*
+/--*Lemma 4.4.6 : Square invariance of formulaTwo in the second entry*--/
 lemma formulaTwo_mul_sq_right (a b c : ℚ_[2]ˣ) : formulaTwo a (b * c ^ 2) = formulaTwo a b :=
   formulaTwo_isSqBimult.mul_sq_right a b c
 
@@ -816,54 +238,50 @@ divisible by `p`). We instead divide a solution by its coordinate of largest nor
 becomes `1`.
 -/
 
-
 /- # 5.1 THE REDUCTION MAP AND THE NORM -/
 
-
---*Lemma 5.1.1 : The kernel of the reduction map ℤ_p → ℤ/p is the ideal generated by p*
+/--*Lemma 5.1.1 : The kernel of the reduction map ℤ_p → ℤ/p is the ideal generated by p*--/
 lemma toZMod_eq_zero_iff_dvd (x : ℤ_[p]) : PadicInt.toZMod x = 0 ↔ (p : ℤ_[p]) ∣ x := by
   rw [← RingHom.mem_ker, PadicInt.ker_toZMod, PadicInt.maximalIdeal_eq_span_p,
     Ideal.mem_span_singleton]
 
---*Lemma 5.1.2 : A p-adic integer in the kernel of reduction has norm < 1*
+/--*Lemma 5.1.2 : A p-adic integer in the kernel of reduction has norm < 1*--/
 lemma norm_lt_one_of_toZMod_eq_zero {x : ℤ_[p]} (h : PadicInt.toZMod x = 0) : ‖x‖ < 1 := by
   grind only [toZMod_eq_zero_iff_dvd, PadicInt.norm_lt_one_iff_dvd]
 
---*Lemma 5.1.3 : A p-adic integer not in the kernel of reduction has norm 1*
+/--*Lemma 5.1.3 : A p-adic integer not in the kernel of reduction has norm 1*--/
 lemma norm_eq_one_of_toZMod_ne_zero {x : ℤ_[p]} (h : PadicInt.toZMod x ≠ 0) : ‖x‖ = 1 := by
   rcases (PadicInt.norm_le_one x).lt_or_eq with hlt | heq
   · grind only [toZMod_eq_zero_iff_dvd, PadicInt.norm_lt_one_iff_dvd]
   · grind
 
---*Lemma 5.1.4 : Units of ℤ_p have nonzero residue mod p*
+/--*Lemma 5.1.4 : Units of ℤ_p have nonzero residue mod p*--/
 lemma toZMod_units_ne_zero (u : ℤ_[p]ˣ) : PadicInt.toZMod (u : ℤ_[p]) ≠ 0 := by
   intro h
   apply PadicInt.zmodRepr_units_ne_zero u
   grind only [PadicInt.zmodRepr_eq_zero_iff_dvd, toZMod_eq_zero_iff_dvd]
 
---*Lemma 5.1.5 : The reduction map mod p is surjective*
+/--*Lemma 5.1.5 : The reduction map mod p is surjective*--/
 lemma exists_toZMod_eq (a : ZMod p) : ∃ b : ℤ_[p], PadicInt.toZMod b = a := ⟨a.val, by simp⟩
 
---*Lemma 5.1.6 : Two p-adic integers have the same residue mod pⁿ iff pⁿ divides their difference*
+/--*Lemma 5.1.6 : Two p-adic integers have the same residue mod pⁿ iff pⁿ divides their difference*--/
 lemma toZModPow_eq_iff_dvd (n : ℕ) (x y : ℤ_[p]) :
     PadicInt.toZModPow n x = PadicInt.toZModPow n y ↔ (p : ℤ_[p]) ^ n ∣ x - y := by
   rw [← sub_eq_zero, ← map_sub, ← RingHom.mem_ker, PadicInt.ker_toZModPow,
     Ideal.mem_span_singleton]
 
---*Lemma 5.1.7 : For odd p, the residue of 2 in ℤ/p is nonzero*
+/--*Lemma 5.1.7 : For odd p, the residue of 2 in ℤ/p is nonzero*--/
 lemma two_ne_zero_zmod_of_odd (hp : Odd p) : (2 : ZMod p) ≠ 0 := by
   have h : p ≠ 2 := by
     grind
   apply Ring.two_ne_zero
   grind only [= Nat.odd_iff, ringChar.eq]
 
---*Lemma 5.1.8 : The reduction map mod pⁿ is surjective*
+/--*Lemma 5.1.8 : The reduction map mod pⁿ is surjective*--/
 lemma exists_toZModPow_eq (n : ℕ) (c : ZMod (p ^ n)) :
     ∃ a : ℤ_[p], PadicInt.toZModPow n a = c := ⟨c.val, by simp⟩
 
-
 /- # 5.2 HENSEL'S LEMMA FOR X² − u (Serre II.2.2, Thm 1) -/
-
 
 --*Lemma 5.2.1 : Hensel's lemma for square roots — an approximate root of X² − u lifts*
 lemma exists_sq_eq_of_norm_lt (u a : ℤ_[p]) (h : ‖a ^ 2 - u‖ < ‖2 * a‖ ^ 2) :
@@ -951,15 +369,30 @@ lemma exists_padicInt_sol_of_norm_le {a b : ℤ_[p]} {z x y t : ℚ_[p]} (ht : t
     (hz : ‖z‖ ≤ ‖t‖) (hx : ‖x‖ ≤ ‖t‖) (hy : ‖y‖ ≤ ‖t‖) (heq : z ^ 2 = a * x ^ 2 + b * y ^ 2) :
     ∃ u v w : ℤ_[p], (u : ℚ_[p]) = z / t ∧ (v : ℚ_[p]) = x / t ∧ (w : ℚ_[p]) = y / t ∧
       u ^ 2 = a * v ^ 2 + b * w ^ 2 := by
-  sorry
+  have hdiv : ∀ {s : ℚ_[p]}, ‖s‖ ≤ ‖t‖ → ‖s / t‖ ≤ 1 := fun hs => by
+    rw[norm_div]
+    apply div_le_one_of_le₀ hs
+    exact norm_nonneg t
+  refine ⟨⟨z / t, hdiv hz⟩, ⟨x / t, hdiv hx⟩, ⟨y / t, hdiv hy⟩, rfl, rfl, rfl, ?_⟩
+  apply Subtype.ext
+  push_cast
+  rw[div_pow, heq]
+  grind
 
---*Lemma 5.5.2 : Any ℚ_p-solution gives a ℤ_p-solution with some coordinate equal to 1*
---*(Serre III.1.2, proof of Thm 1)*
+/--*Lemma 5.5.2 : In a finite set of norms of p-adic numbers, there exists a maximum*--/
+lemma exists_max_norm (z x y : ℚ_[p]) : ∃ t : ℚ_[p],
+    (t = z ∨ t = x ∨ t = y) ∧ ‖z‖ ≤ ‖t‖ ∧ ‖x‖ ≤ ‖t‖ ∧ ‖y‖ ≤ ‖t‖ := by
+  classical
+  have hne : ({z, x, y} : Finset ℚ_[p]).Nonempty := by simp
+  obtain ⟨ t, ht, hmax ⟩ := Finset.exists_max_image {z, x, y} (fun s => ‖s‖) hne
+  grind
+
+/--*Lemma 5.5.3 : Any ℚ_p-solution gives a ℤ_p-solution with some coordinate equal to 1*
+*(Serre III.1.2, proof of Thm 1)*--/
 lemma exists_primitive_sol {a b : ℤ_[p]} (h : HilbertSolvable ℚ_[p] a b) :
-    ∃ z x y : ℤ_[p], (z = 1 ∨ x = 1 ∨ y = 1) ∧ z ^ 2 = a * x ^ 2 + b * y ^ 2 := by
-  sorry
+    ∃ z x y : ℤ_[p], (z = 1 ∨ x = 1 ∨ y = 1) ∧ z ^ 2 = a * x ^ 2 + b * y ^ 2 := by sorry
 
---*Lemma 5.5.3 : A ℤ_p-solution with z ≠ 0 is a ℚ_p-solution*
+--*Lemma 5.5.4 : A ℤ_p-solution with z ≠ 0 is a ℚ_p-solution*
 lemma hilbertSolvable_of_padicInt_sol {a b z x y : ℤ_[p]} (hz : z ≠ 0)
     (h : z ^ 2 = a * x ^ 2 + b * y ^ 2) : HilbertSolvable ℚ_[p] a b := by
   refine ⟨z, x, y, ?_, ?_⟩
@@ -968,7 +401,7 @@ lemma hilbertSolvable_of_padicInt_sol {a b z x y : ℤ_[p]} (hz : z ≠ 0)
   push_cast at h1
   exact h1
 
---*Lemma 5.5.4 : A solution of z² = ax² + by² is preserved by any ring homomorphism out of ℤ_p*
+--*Lemma 5.5.5 : A solution of z² = ax² + by² is preserved by any ring homomorphism out of ℤ_p*
 lemma map_sol {R : Type*} [CommRing R] (f : ℤ_[p] →+* R) {z x y a b : ℤ_[p]}
     (h : z ^ 2 = a * x ^ 2 + b * y ^ 2) :
     f z ^ 2 = f a * f x ^ 2 + f b * f y ^ 2 := by
@@ -999,9 +432,7 @@ Prop 2 (iii) (Lemma 2.4.3) and lands in the key case; case (iii) reduces to (ii)
 (Lemma 6.1.3).
 -/
 
-
 /- # 6.1 VALUES OF formulaOdd ON THE THREE CONFIGURATIONS -/
-
 
 --*Lemma 6.1.1 : formulaOdd a b = 1 when v a = v b = 0*
 lemma formulaOdd_eq_one_of_valuationUnits_zero_zero {a b : ℚ_[p]ˣ} (ha : valuationUnits a = 0)
@@ -1034,9 +465,7 @@ lemma formulaOdd_neg_self_mul_of_valuationUnits_eq_one {a : ℚ_[p]ˣ} (ha : val
     (b : ℚ_[p]ˣ) : formulaOdd a (-a * b) = formulaOdd a b := by
   rw [formulaOdd_mul_right, formulaOdd_neg_self_of_valuationUnits_eq_one ha, one_mul]
 
-
 /- # 6.2 THE LEGENDRE SYMBOL OF THE UNIT PART -/
-
 
 --*Lemma 6.2.1 : Legendre symbol of the unit part is 1 iff its residue mod p is a square*
 lemma quadraticCharUnits_unitPartZMod_eq_one_iff (a : ℚ_[p]ˣ) :
@@ -1049,9 +478,7 @@ lemma quadraticCharUnits_unitPartZMod_eq_neg_one_iff (a : ℚ_[p]ˣ) :
       ↔ ¬ IsSquare (PadicInt.toZMod (unitPart a : ℤ_[p])) := by
   rw [quadraticCharUnits_eq_neg_one_iff, coe_unitPartZMod]
 
-
 /- # 6.3 THE GEOMETRIC SIDE : TWO UNITS, AND (p, v) FOR A NON-RESIDUE v -/
-
 
 --*Lemma 6.3.1 : The Hilbert symbol of two units equals 1 (Serre III.1.2, case (i))*
 lemma hilbertSym_eq_one_of_valuationUnits_zero_zero (hp : Odd p) {a b : ℚ_[p]ˣ}
@@ -1067,9 +494,7 @@ lemma not_hilbertSolvable_p_of_not_isSquare {w : ℤ_[p]} (h : ¬ IsSquare (Padi
     ¬ HilbertSolvable ℚ_[p] ((p : ℤ_[p]) : ℚ_[p]) w := by
   sorry
 
-
 /- # 6.4 SERRE'S CASES FOR ODD p -/
-
 
 --*Lemma 6.4.1 : Case (i) — two units, (v a, v b) = (0,0)*
 lemma hilbertSym_eq_formulaOdd_of_valuationUnits_zero_zero (hp : Odd p) {a b : ℚ_[p]ˣ}

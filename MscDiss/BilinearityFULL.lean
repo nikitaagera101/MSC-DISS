@@ -1,6 +1,11 @@
 import Mathlib.Tactic
-import Mathlib.NumberTheory.Padics.PadicNumbers
-import Mathlib
+import Mathlib.Algebra.Order.Ring.Star
+import Mathlib.NumberTheory.LegendreSymbol.QuadraticChar.Basic
+import Mathlib.NumberTheory.Padics.Hensel
+import Mathlib.NumberTheory.Padics.RingHoms
+import Mathlib.RingTheory.Henselian
+import Mathlib.RingTheory.RegularLocalRing.Defs
+import Mathlib.RingTheory.SimpleRing.Principal
 
 /- # SECTION 1 : THE SQUARE CLASS GROUP -/
 /-

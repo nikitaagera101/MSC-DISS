@@ -68,6 +68,7 @@ structure IsSqBimult (F : Kˣ → Kˣ → ℤˣ) : Prop where
   mul_right  : ∀ a b b', F a (b * b') = F a b * F a b'
 
 namespace IsSqBimult
+
 variable {F : Kˣ → Kˣ → ℤˣ}
 
 --*Lemma 1.4.1 : For a bimutiplicative map F, F 1 a = 1*
